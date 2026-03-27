@@ -1,0 +1,5 @@
+{
+  "name": "Color Block Party",
+  "description": "A 3D mini-game where you must run to the correct colored block before the time runs out!",
+  "requestFramePermissions": []
+}

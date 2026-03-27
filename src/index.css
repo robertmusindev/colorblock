@@ -1,0 +1,129 @@
+@import "tailwindcss";
+
+:root {
+  --font-family: 'Nunito', 'Poppins', sans-serif;
+  --font-display: 'Luckiest Guy', cursive;
+  --font-pixel: 'Press Start 2P', monospace;
+  --retro-bg: #050d1a;
+  --retro-panel: #0a1628;
+  --retro-cyan: #00e5ff;
+  --retro-yellow: #ffee00;
+  --retro-pink: #ff3399;
+  --retro-green: #00ff88;
+  --retro-red: #ff3366;
+}
+
+.font-display {
+  font-family: var(--font-display);
+  letter-spacing: 0.05em;
+}
+
+.font-pixel {
+  font-family: var(--font-pixel);
+  letter-spacing: 0.05em;
+  line-height: 1.6;
+}
+
+body {
+  font-family: var(--font-family);
+  user-select: none;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+  background: var(--retro-bg);
+}
+
+/* Retro pixel panel — dark bg + neon border + subtle scanlines */
+.retro-panel {
+  background: var(--retro-panel);
+  border: 3px solid var(--retro-cyan);
+  box-shadow: 6px 6px 0 var(--retro-cyan);
+  border-radius: 4px;
+  position: relative;
+  overflow: hidden;
+}
+
+.retro-panel::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 3px,
+    rgba(0, 229, 255, 0.03) 3px,
+    rgba(0, 229, 255, 0.03) 4px
+  );
+  pointer-events: none;
+  z-index: 0;
+}
+
+.retro-panel > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* Neon text glow */
+.neon-cyan   { color: var(--retro-cyan);   text-shadow: 0 0 8px var(--retro-cyan),   2px 2px 0 #000; }
+.neon-yellow { color: var(--retro-yellow); text-shadow: 0 0 8px var(--retro-yellow), 2px 2px 0 #000; }
+.neon-pink   { color: var(--retro-pink);   text-shadow: 0 0 8px var(--retro-pink),   2px 2px 0 #000; }
+.neon-green  { color: var(--retro-green);  text-shadow: 0 0 8px var(--retro-green),  2px 2px 0 #000; }
+.neon-red    { color: var(--retro-red);    text-shadow: 0 0 12px var(--retro-red),   2px 2px 0 #000; }
+
+/* Pixel button */
+.pixel-btn {
+  font-family: var(--font-pixel);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border-radius: 3px;
+  transition: box-shadow 0.08s, transform 0.08s;
+  cursor: pointer;
+  image-rendering: pixelated;
+}
+.pixel-btn:active {
+  transform: translate(3px, 3px) !important;
+  box-shadow: none !important;
+}
+
+/* Pixel input */
+.pixel-input {
+  background: #050d1a;
+  border: 2px solid rgba(0, 229, 255, 0.4);
+  color: #00e5ff;
+  font-family: var(--font-pixel);
+  font-size: 10px;
+  border-radius: 3px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+.pixel-input:focus {
+  border-color: var(--retro-cyan);
+  box-shadow: 0 0 8px rgba(0, 229, 255, 0.3);
+}
+.pixel-input::placeholder {
+  color: rgba(0, 229, 255, 0.35);
+}
+
+/* Chrome, Safari, Edge, Opera reset arrows for numbers */
+input::-webkit-outer-spin-button,
+input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* Blinking cursor animation for retro text */
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0; }
+}
+.blink { animation: blink 1s step-start infinite; }
+
+/* CRT flicker — very subtle */
+@keyframes crt-flicker {
+  0%   { opacity: 1; }
+  92%  { opacity: 1; }
+  93%  { opacity: 0.96; }
+  94%  { opacity: 1; }
+  100% { opacity: 1; }
+}
+.crt-flicker { animation: crt-flicker 6s infinite; }
