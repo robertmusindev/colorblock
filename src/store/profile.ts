@@ -73,6 +73,9 @@ export interface UserProfile {
   equipped_skin?: string;
   equipped_hat?: string;
   missions: Mission[];
+  parkour_records?: Record<string, number>; // level (as string key) → best elapsed seconds
+  total_wins?: number;        // Block Party wins
+  ghetto_best_waves?: number; // best waves reached in Ghetto before dying/clearing
 }
 
 interface ProfileState {
@@ -90,6 +93,9 @@ interface ProfileState {
   dismissNotification: (id: string) => void;
   equipSkin: (skinId: string) => Promise<void>;
   equipHat: (hatId: string) => Promise<void>;
+  saveParkourRecord: (level: number, elapsed: number) => Promise<void>;
+  recordClassicWin: () => Promise<void>;
+  recordGhettoWaves: (waves: number) => Promise<void>;
 }
 
 export const useProfileStore = create<ProfileState>((set, get) => ({
@@ -155,6 +161,9 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
             inventory: inv,
             equipped_skin: data.equipped_skin || 'default_skin',
             equipped_hat: (inv as any).equipped_hat || undefined,
+            parkour_records: data.parkour_records || {},
+            total_wins: data.total_wins ?? 0,
+            ghetto_best_waves: data.ghetto_best_waves ?? 0,
           },
           isLoading: false
         });
@@ -459,6 +468,60 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
     set(state => ({
       notifications: state.notifications.filter(n => n.id !== id)
     }));
+  },
+
+  saveParkourRecord: async (level: number, elapsed: number) => {
+    const user = useAuthStore.getState().user;
+    if (!user) return;
+    const { profile } = get();
+    if (!profile) return;
+    const key = String(level);
+    const current = profile.parkour_records?.[key];
+    // Only update if it's a new best
+    if (current !== undefined && elapsed >= current) return;
+    const newRecords = { ...(profile.parkour_records || {}), [key]: elapsed };
+    // Optimistic local update
+    set({ profile: { ...profile, parkour_records: newRecords } });
+    try {
+      const { error } = await supabase
+        .from('profiles')
+        .update({ parkour_records: newRecords })
+        .eq('id', user.id);
+      if (error) throw error;
+    } catch (err) {
+      console.error('Error saving parkour record:', err);
+      // Revert on failure
+      set({ profile: { ...get().profile!, parkour_records: profile.parkour_records } });
+    }
+  },
+
+  recordClassicWin: async () => {
+    const user = useAuthStore.getState().user;
+    if (!user) return;
+    const { profile } = get();
+    if (!profile) return;
+    const newWins = (profile.total_wins ?? 0) + 1;
+    set({ profile: { ...profile, total_wins: newWins } });
+    try {
+      await supabase.from('profiles').update({ total_wins: newWins }).eq('id', user.id);
+    } catch (err) {
+      console.error('Error recording classic win:', err);
+    }
+  },
+
+  recordGhettoWaves: async (waves: number) => {
+    const user = useAuthStore.getState().user;
+    if (!user) return;
+    const { profile } = get();
+    if (!profile) return;
+    const current = profile.ghetto_best_waves ?? 0;
+    if (waves <= current) return; // only update if new best
+    set({ profile: { ...profile, ghetto_best_waves: waves } });
+    try {
+      await supabase.from('profiles').update({ ghetto_best_waves: waves }).eq('id', user.id);
+    } catch (err) {
+      console.error('Error recording ghetto waves:', err);
+    }
   },
 
   updateMissionProgress: (type: Mission['type'], amount: number) => {

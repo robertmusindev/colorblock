@@ -108,7 +108,7 @@ export const UserProfile = ({ user }: UserProfileProps) => {
             initial={{ scale: 0, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0, opacity: 0 }}
-            className="absolute top-14 right-2 sm:top-16 sm:right-4 md:top-24 md:right-8 z-[100] pointer-events-auto"
+            className="relative pointer-events-auto shrink-0 flex items-center justify-center"
           >
             <motion.button
               animate={{ 

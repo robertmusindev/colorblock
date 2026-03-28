@@ -114,6 +114,7 @@ interface GameStore {
   // Parkour mode actions
   setGameMode: (mode: GameMode) => void;
   startParkourGame: () => void;
+  restartParkourLevel: () => void;
   tickParkour: (delta: number) => void;
   completeParkourLevel: () => void;
   resetParkourGame: () => void;
@@ -650,6 +651,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
     const newHP = get().ghettoHP - amount;
     if (newHP <= 0) {
       set({ ghettoHP: 0, ghettoRegenTimer: 0 });
+      // Record waves survived before dying (wave N = currently fighting → N-1 fully cleared)
+      const wavesSurvived = Math.max(0, get().ghettoWave - 1);
+      import('./store/profile').then(m => {
+        m.useProfileStore.getState().recordGhettoWaves(wavesSurvived);
+      });
       get().playerDied();
     } else {
       // Damage resets the regen countdown to 6s
@@ -664,6 +670,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       audio.stopMusic();
       import('./store/profile').then(m => {
         m.useProfileStore.getState().addReward(ghettoWave, true, ghettoScore);
+        m.useProfileStore.getState().recordGhettoWaves(ghettoWave); // cleared all waves
       });
       return;
     }
@@ -680,7 +687,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     audio.init();
     audio.startMusic();
 
-    const timeLimits = [45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100, 105, 110, 120];
+    const timeLimits = [75, 85, 90, 95, 100, 105, 110, 115, 120, 125, 130, 135, 140, 150, 180];
 
     set(state => ({
       gameId: state.gameId + 1,
@@ -702,6 +709,22 @@ export const useGameStore = create<GameStore>((set, get) => ({
       maxTime: 0,
       roundsSurvived: 0,
       gridColors: Array.from({ length: 400 }, () => 0),
+    }));
+  },
+
+  restartParkourLevel: () => {
+    const timeLimits = [75, 85, 90, 95, 100, 105, 110, 115, 120, 125, 130, 135, 140, 150, 180];
+    const { parkourLevel } = get();
+    const timeForLevel = timeLimits[parkourLevel - 1] ?? 60;
+    set(state => ({
+      gameId: state.gameId + 1,
+      gameState: 'playing',
+      parkourTime: timeForLevel,
+      maxParkourTime: timeForLevel,
+      collectedParkourCoins: [],
+      activeGadgets: [],
+      sessionCoins: 0,
+      spawnedCoins: [],
     }));
   },
 
@@ -730,8 +753,25 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   completeParkourLevel: () => {
-    const { parkourLevel } = get();
+    const { parkourLevel, parkourTime, maxParkourTime } = get();
     audio.playRoundStartSound();
+
+    // Capture elapsed time NOW, before any state reset
+    const elapsed = maxParkourTime - parkourTime;
+
+    // Save personal best immediately (both localStorage + Supabase for logged-in users)
+    if (elapsed > 0) {
+      try {
+        const key = `pkPB_${parkourLevel}`;
+        const prev = localStorage.getItem(key);
+        if (!prev || elapsed < parseFloat(prev)) {
+          localStorage.setItem(key, elapsed.toFixed(2));
+        }
+      } catch {}
+      import('./store/profile').then(m => {
+        m.useProfileStore.getState().saveParkourRecord(parkourLevel, elapsed);
+      });
+    }
 
     if (parkourLevel >= PARKOUR_MAX_LEVEL) {
       set({ gameState: 'victory', activeGadgets: [] });
@@ -744,7 +784,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
     set({ gameState: 'levelcomplete' });
 
-    const timeLimits = [45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100, 105, 110, 120];
+    const timeLimits = [75, 85, 90, 95, 100, 105, 110, 115, 120, 125, 130, 135, 140, 150, 180];
     const nextLevel = parkourLevel + 1;
 
     setTimeout(() => {

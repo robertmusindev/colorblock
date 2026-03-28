@@ -144,6 +144,33 @@ function GameLogic() {
         if (uiRefs.timerText) {
           uiRefs.timerText.innerText = gameState === 'playing' ? `${timeLeft.toFixed(1)}s` : '0.0s';
         }
+        if (uiRefs.stopwatch && gameMode === 'parkour') {
+          const elapsed = maxTimeVal - timeLeft;
+          const mins = Math.floor(elapsed / 60);
+          const secs = elapsed % 60;
+          uiRefs.stopwatch.innerText = mins > 0
+            ? `${mins}:${secs.toFixed(0).padStart(2, '0')}`
+            : `${secs.toFixed(1)}s`;
+        }
+        if (uiRefs.parkourVignette) {
+          if (gameMode === 'parkour' && gameState === 'playing') {
+            const ratio = timeLeft / maxTimeVal;
+            if (ratio < 0.10) {
+              // Critical: flicker via CSS animation
+              uiRefs.parkourVignette.style.animation = 'vignetteFlicker 0.45s ease-in-out infinite';
+              uiRefs.parkourVignette.style.opacity = '0.55';
+            } else if (ratio < 0.25) {
+              uiRefs.parkourVignette.style.animation = '';
+              uiRefs.parkourVignette.style.opacity = String(((0.25 - ratio) / 0.25 * 0.50).toFixed(3));
+            } else {
+              uiRefs.parkourVignette.style.animation = '';
+              uiRefs.parkourVignette.style.opacity = '0';
+            }
+          } else {
+            uiRefs.parkourVignette.style.animation = '';
+            uiRefs.parkourVignette.style.opacity = '0';
+          }
+        }
       }
     }
   });

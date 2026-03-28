@@ -74,6 +74,7 @@ export function Player() {
   const airJumpsRef       = useRef(0);    // Air jumps used (for double jump gadget)
   const blockGroundedRef  = useRef(false); // True after jump — clears only on real landing (velocity snap)
   const jumpCooldownRef   = useRef(0);    // Minimum time between jumps to prevent spam
+  const inFlightRef       = useRef(false); // True from any jump until confirmed landing — guards airJumps reset
 
   // Ghetto mode refs
   const gameModeRef = useRef<string>('classic');
@@ -408,13 +409,21 @@ export function Player() {
     const prevVelY = prevVelYRef.current;
     prevVelYRef.current = vel.y;
     prevYRef.current    = pos.y;
-    // Clear blockGrounded when we detect a real landing: was falling AND velocity snapped to near-zero
-    // Threshold -0.3 (not -1.0) so short/tap jumps also clear it on landing
-    if (blockGroundedRef.current && prevVelY < -0.3 && Math.abs(vel.y) < 0.5) {
+    // Clear blockGrounded on real landing: was falling at >1 m/s AND velocity jumped by ≥2 m/s
+    // (genuine floor contact). A delta of 2+ filters out side brushes that barely change vel.y.
+    // Works for static (vel snaps to ~0), upward platforms (snaps to +N) and downward (snaps to -N+delta).
+    // vel.y < 2.0 distinguishes a real landing (vel snaps to ~0) from a double jump
+    // (vel snaps to +jumpForce ~7), which would otherwise falsely clear inFlight/airJumps.
+    if (blockGroundedRef.current && prevVelY < -1.0 && vel.y > prevVelY + 2.0 && vel.y < 2.0) {
       blockGroundedRef.current = false;
+      inFlightRef.current = false; // Confirmed landing — flight sequence over
+      airJumpsRef.current = 0;    // Restore air jumps on real landing
     }
-    // rawGrounded: stable vertical velocity AND not mid-jump (blockGrounded guards the apex)
-    const rawGrounded = !blockGroundedRef.current && Math.abs(vel.y) < 0.8 && yDiff < 0.15;
+    // rawGrounded: not mid-jump (blockGrounded) AND not actively jumping up fast (vel.y < 3.0)
+    // AND not falling (vel.y > -1.5) AND position stable per-frame (yDiff < 0.2).
+    // Using vel.y < 3.0 instead of Math.abs so upward-moving platforms (vel.y = +2)
+    // are correctly detected as grounded, while a fresh jump (vel.y = +12) is not.
+    const rawGrounded = !blockGroundedRef.current && vel.y < 3.0 && vel.y > -1.5 && yDiff < 0.2;
 
     // Coyote time: 80ms grace period after leaving ground to allow late jumps
     if (rawGrounded) {
@@ -712,8 +721,9 @@ export function Player() {
     jumpBufferRef.current  = Math.max(0, jumpBufferRef.current  - delta);
     jumpCooldownRef.current = Math.max(0, jumpCooldownRef.current - delta);
 
-    // Reset air jumps only on confirmed ground contact (not during coyote window)
-    if (rawGrounded) airJumpsRef.current = 0;
+    // Reset air jumps only when grounded AND not mid-flight (inFlight guards against
+    // false rawGrounded flashes from moving platforms re-touching the player in mid-air).
+    if (rawGrounded && !inFlightRef.current) airJumpsRef.current = 0;
 
     const wantsJump    = jumpBufferRef.current > 0 && !keys.current.jumpHandled && jumpCooldownRef.current <= 0;
     const canAirJump   = wantsJump && !isGrounded && hasDoubleJump && airJumpsRef.current < 1;
@@ -726,6 +736,7 @@ export function Player() {
       if (!isGrounded) airJumpsRef.current++;
       jumpBufferRef.current  = 0;
       jumpCooldownRef.current = 0.4; // 400ms minimum between jumps
+      inFlightRef.current = true;    // Mark as in-flight — airJumps won't reset until confirmed landing
       blockGroundedRef.current = true; // Block grounded until confirmed landing (vel snap)
       if (avatarRef.current) avatarRef.current.scale.set(1.4, 0.6, 1.4);
       keys.current.jumpHandled = true;
