@@ -1389,7 +1389,7 @@ export default function App() {
                   style={{ background: 'rgba(5,9,18,0.80)', backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)', border: '1px solid rgba(0,255,128,0.35)', borderRadius: '10px', boxShadow: '0 4px 24px rgba(0,0,0,0.55)', pointerEvents: 'auto' }}>
                   <span style={{ ...PIXEL, fontSize: '8px', color: '#00ff80', textShadow: '0 0 10px #00ff80' }}>🧪 TESTING</span>
                   <button
-                    onClick={() => useGameStore.setState({ gameState: 'menu', gameMode: 'classic', isPaused: false })}
+                    onClick={() => useGameStore.getState().resetToMenu()}
                     style={{ ...BTN_R, fontSize: '7px', padding: '4px 8px' }}>
                     EXIT
                   </button>

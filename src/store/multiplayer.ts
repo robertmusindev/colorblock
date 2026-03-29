@@ -272,6 +272,9 @@ export const useMultiplayerStore = create<MultiplayerState>((set, get) => ({
       (window as any).remotePlayerBuffer = {};
     }
 
+    // Reset game state so the next session starts clean (e.g. not stuck in 'testing')
+    useGameStore.getState().resetToMenu();
+
     set({ channel: null, lobbyId: null, isHost: false, players: [], myPlayerId: null });
   },
 

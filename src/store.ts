@@ -52,6 +52,7 @@ interface GameStore {
   setHoveredBlock: (index: number) => void;
   startGame: () => void;
   startTesting: () => void;
+  resetToMenu: () => void;
   startRound: () => void;
   collectCoin: (index: number) => void;
 
@@ -298,6 +299,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       roundsSurvived: 0,
       playerSpeedMultiplier: 1,
       gameState: 'waiting',
+      gameMode: 'classic', // always reset to classic when a real game starts
       isPaused: false,
       sessionCoins: 0,
       spawnedCoins: [],
@@ -368,6 +370,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
       gameState: 'playing',
       isPaused: false,
     }));
+  },
+
+  resetToMenu: () => {
+    set({ gameState: 'menu', gameMode: 'classic', isPaused: false });
   },
 
   togglePause: () => set(state => ({ isPaused: !state.isPaused })),
