@@ -16,52 +16,63 @@ interface NetworkPlayerProps {
 // Pre-allocate to avoid GC in useFrame
 const _targetQuat = new THREE.Quaternion();
 const _euler = new THREE.Euler();
-const _prevPos = new THREE.Vector3();
+const _prevNetPos = new THREE.Vector3(); // previous network-received position (for velocity)
 
 export function NetworkPlayer({ id, name, position, rotation, isEliminated, skinId }: NetworkPlayerProps) {
   const group = useRef<THREE.Group>(null);
   const legLRef = useRef<THREE.Object3D | null>(null);
   const legRRef = useRef<THREE.Object3D | null>(null);
-  
-  // Create a ThreeJS Vector3 interpolation target to smooth movement
+
   const targetPosition = useRef(new THREE.Vector3(...position));
   const hasInitialized = useRef(false);
-  
+
+  // Smoothed speed estimation from network deltas (not per-frame lerp delta)
+  const smoothedSpeed = useRef(0);
+  const lastNetworkPosRef = useRef(new THREE.Vector3(...position));
+  const lastNetworkTimeRef = useRef(Date.now());
+
   // Track falling state for elimination animation
   const isFalling = useRef(false);
   const fallVelocity = useRef(0);
   const walkTime = useRef(0);
 
-  // Snap to real position on mount: read buffer first (more current than Zustand presence pos)
-  // This prevents the [0,5,0] ghost-slide that happens when Zustand never carries live movement.
+  // Snap immediately on mount: read buffer first (more current than Zustand presence pos)
+  // This prevents the [0,5,0] ghost-slide since Zustand never carries live movement data.
   useEffect(() => {
     const buffer = (window as any).remotePlayerBuffer;
-    const snapPos = (buffer && buffer[id]?.position) ? buffer[id].position : position;
+    const b = buffer?.[id];
+    const snapPos = b?.position ?? position;
     targetPosition.current.set(snapPos[0], snapPos[1], snapPos[2]);
-    if (group.current) group.current.position.copy(targetPosition.current);
+    lastNetworkPosRef.current.set(snapPos[0], snapPos[1], snapPos[2]);
+    if (group.current) {
+      group.current.position.copy(targetPosition.current);
+      // Also snap rotation from buffer so the model faces the right direction immediately
+      if (b?.rotation) {
+        _euler.set(b.rotation[0], b.rotation[1], b.rotation[2], 'XYZ');
+        _targetQuat.setFromEuler(_euler);
+        group.current.quaternion.copy(_targetQuat);
+      }
+    }
     hasInitialized.current = true;
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const { scene } = useGLTF(import.meta.env.BASE_URL + 'asset3d/charactert.glb');
   const textures = useTexture({
-    default: import.meta.env.BASE_URL + 'texture/TEST_Material.002_BaseColor.png',
-    israel: import.meta.env.BASE_URL + 'skins/israel_skin.png',
+    default:      import.meta.env.BASE_URL + 'texture/TEST_Material.002_BaseColor.png',
+    israel:       import.meta.env.BASE_URL + 'skins/israel_skin.png',
     robsbagliato: import.meta.env.BASE_URL + 'texture/robsbagliato.png',
+    skin3:        import.meta.env.BASE_URL + 'texture/skin3.png',
+    skin4:        import.meta.env.BASE_URL + 'texture/skin4.png',
   });
 
   const [currentSkin, setCurrentSkin] = (useState as any)(skinId || 'default_skin');
 
   const clone = useMemo(() => {
     const c = scene.clone();
-    
-    // Apply skin using centralized utility
     applySkinToModel(c, currentSkin, textures);
-    
-    // Find leg nodes by actual GLB names
     const { legL, legR } = findLegNodes(c);
     legLRef.current = legL;
     legRRef.current = legR;
-    
     return c;
   }, [scene, textures, currentSkin]);
 
@@ -69,23 +80,39 @@ export function NetworkPlayer({ id, name, position, rotation, isEliminated, skin
     if (!group.current) return;
 
     if (isEliminated) {
-        if (!isFalling.current) {
-            isFalling.current = true;
-        }
-        fallVelocity.current += 9.8 * delta * 2;
-        group.current.position.y -= fallVelocity.current * delta;
-        group.current.rotation.x += delta;
-        group.current.rotation.z += delta * 0.5;
-        return;
+      if (!isFalling.current) isFalling.current = true;
+      fallVelocity.current += 9.8 * delta * 2;
+      group.current.position.y -= fallVelocity.current * delta;
+      group.current.rotation.x += delta;
+      group.current.rotation.z += delta * 0.5;
+      return;
     }
 
-    // Optimized: Read from non-reactive buffer
+    // Read from non-reactive buffer
     const buffer = (window as any).remotePlayerBuffer;
     if (buffer && buffer[id]) {
       const b = buffer[id];
-      // Skip stale data (player likely disconnected if >2s without update)
-      if ((Date.now() - b.timestamp) <= 2000) {
-        targetPosition.current.set(b.position[0], b.position[1], b.position[2]);
+      const age = Date.now() - b.timestamp;
+
+      // Skip stale data (player likely disconnected if >2.5s without update)
+      if (age <= 2500) {
+        const nx = b.position[0], ny = b.position[1], nz = b.position[2];
+        const prevNet = lastNetworkPosRef.current;
+
+        // Update smoothed speed estimate whenever the buffer holds a NEW packet
+        // (detected by checking if network position changed since last read)
+        if (nx !== prevNet.x || ny !== prevNet.y || nz !== prevNet.z) {
+          const dt = Math.max(0.001, (Date.now() - lastNetworkTimeRef.current) / 1000);
+          _prevNetPos.set(nx - prevNet.x, ny - prevNet.y, nz - prevNet.z);
+          const rawSpeed = _prevNetPos.length() / dt;
+          // Exponential smoothing to avoid jitter from occasional large deltas
+          smoothedSpeed.current = smoothedSpeed.current * 0.6 + rawSpeed * 0.4;
+
+          lastNetworkPosRef.current.set(nx, ny, nz);
+          lastNetworkTimeRef.current = Date.now();
+        }
+
+        targetPosition.current.set(nx, ny, nz);
 
         if (b.skinId && b.skinId !== currentSkin) {
           setCurrentSkin(b.skinId);
@@ -94,6 +121,9 @@ export function NetworkPlayer({ id, name, position, rotation, isEliminated, skin
         _euler.set(b.rotation[0], b.rotation[1], b.rotation[2], 'XYZ');
         _targetQuat.setFromEuler(_euler);
         group.current.quaternion.slerp(_targetQuat, 1 - Math.exp(-15 * delta));
+      } else {
+        // Data went stale — player stopped moving or disconnected
+        smoothedSpeed.current *= 0.9; // decay speed so legs return to idle
       }
     }
 
@@ -102,37 +132,38 @@ export function NetworkPlayer({ id, name, position, rotation, isEliminated, skin
       updateLegendaryRainbow(clone, state.clock.elapsedTime);
     }
 
-    const lerpFactor = 1 - Math.exp(-12 * delta);
-    _prevPos.copy(group.current.position);
-    group.current.position.lerp(targetPosition.current, lerpFactor);
+    // Position interpolation
+    group.current.position.lerp(targetPosition.current, 1 - Math.exp(-12 * delta));
 
-    const distanceMoved = _prevPos.distanceTo(group.current.position);
+    // --- Animation driven by smoothed network speed (not per-frame lerp delta) ---
+    const speed = smoothedSpeed.current;
     const legL = legLRef.current;
     const legR = legRRef.current;
-    
-    if (distanceMoved > 0.05) {
-      walkTime.current += delta * (distanceMoved / delta) * 0.5;
-      const swingAmplitude = Math.min(0.7, distanceMoved * 8);
-      
-      // Natural walk: Leg_S and Leg_R in opposite phase  
+
+    if (speed > 0.8) {
+      // Running: speed-scaled walk cycle
+      walkTime.current += delta * Math.min(speed, 14) * 0.5;
+      const swingAmplitude = Math.min(0.75, speed * 0.065);
+
       if (legL) {
         legL.rotation.x = THREE.MathUtils.lerp(
           legL.rotation.x,
           Math.sin(walkTime.current) * swingAmplitude,
-          1 - Math.exp(-20 * delta)
+          1 - Math.exp(-18 * delta)
         );
       }
       if (legR) {
         legR.rotation.x = THREE.MathUtils.lerp(
           legR.rotation.x,
           Math.sin(walkTime.current + Math.PI) * swingAmplitude,
-          1 - Math.exp(-20 * delta)
+          1 - Math.exp(-18 * delta)
         );
       }
     } else {
-      // Return to neutral
-      if (legL) legL.rotation.x = THREE.MathUtils.lerp(legL.rotation.x, 0, 1 - Math.exp(-15 * delta));
-      if (legR) legR.rotation.x = THREE.MathUtils.lerp(legR.rotation.x, 0, 1 - Math.exp(-15 * delta));
+      // Idle: smooth legs back to neutral
+      smoothedSpeed.current = Math.max(0, smoothedSpeed.current - delta * 8);
+      if (legL) legL.rotation.x = THREE.MathUtils.lerp(legL.rotation.x, 0, 1 - Math.exp(-12 * delta));
+      if (legR) legR.rotation.x = THREE.MathUtils.lerp(legR.rotation.x, 0, 1 - Math.exp(-12 * delta));
       walkTime.current = 0;
     }
   });
@@ -148,7 +179,7 @@ export function NetworkPlayer({ id, name, position, rotation, isEliminated, skin
         </Billboard>
       )}
 
-      {/* 3D Model Avatar for Network Players */}
+      {/* 3D Model Avatar */}
       <group position={[0, -0.9, 0]}>
         <primitive object={clone} />
       </group>
