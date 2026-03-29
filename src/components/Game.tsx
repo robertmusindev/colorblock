@@ -221,6 +221,7 @@ export function Game() {
   if (!isGhettoActive) cameraShakeRef.current = 0;
   const isParkourActive = gameMode === 'parkour' &&
     (gameState === 'playing' || gameState === 'levelcomplete');
+  const isTestingActive = gameMode === 'testing' && gameState === 'playing';
 
   // Delay player spawn so the arena floor collider (which was primed during loading) is
   // definitely active before the player's first physics tick.  500 ms is enough because
@@ -272,7 +273,30 @@ export function Game() {
               so Rapier has plenty of time to register the collider — see primeGhettoFloor() */}
           {ghettoFloorPrimed && <GhettoFloor />}
 
-          {isGhettoActive ? (
+          {isTestingActive ? (
+            /* ── Testing mode: flat floor, player + network players, no game logic ── */
+            <>
+              <RigidBody type="fixed" colliders={false}>
+                <CuboidCollider args={[50, 0.25, 50]} position={[0, -0.25, 0]} />
+                <mesh position={[0, 0, 0]} receiveShadow>
+                  <boxGeometry args={[100, 0.5, 100]} />
+                  <meshStandardMaterial color="#1a2a1a" />
+                </mesh>
+              </RigidBody>
+              <Player key={`player-testing-${gameId}`} />
+              {lobbyId && remotePlayers.map(p => (
+                <NetworkPlayer
+                  key={`net-${p.id}`}
+                  id={p.id}
+                  name={p.name}
+                  position={p.position || [0, 5, 0]}
+                  rotation={p.rotation}
+                  isEliminated={p.isEliminated}
+                  skinId={p.skinId}
+                />
+              ))}
+            </>
+          ) : isGhettoActive ? (
             /* ── Ghetto mode: arena + enemies ── */
             <>
               <GhettoLevel

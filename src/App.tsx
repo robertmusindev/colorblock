@@ -846,6 +846,7 @@ export default function App() {
   const roundsSurvived = useGameStore(state => state.roundsSurvived);
   const gameState = useGameStore(state => state.gameState);
   const startGame = useGameStore(state => state.startGame);
+  const startTesting = useGameStore(state => state.startTesting);
   const username = useGameStore(state => state.username);
   const setUsername = useGameStore(state => state.setUsername);
   const aliveBots = useGameStore(state => state.aliveBots);
@@ -1349,7 +1350,7 @@ export default function App() {
       </AnimatePresence>
 
       {/* ── Center Timer Bar — floating top-center, shown during play ── */}
-      {(gameState === 'playing' || gameState === 'elimination') && gameMode !== 'ghetto' && (
+      {(gameState === 'playing' || gameState === 'elimination') && gameMode !== 'ghetto' && gameMode !== 'testing' && (
         <CenterTimerBar />
       )}
 
@@ -1382,6 +1383,17 @@ export default function App() {
                     <span style={{ ...PIXEL, fontSize: '7px', color: '#ff4466' }}>💀 {ghettoScore}</span>
                   </div>
                 </div>
+              ) : gameMode === 'testing' ? (
+                /* Testing mode badge + exit */
+                <div className="flex items-center gap-2 p-3"
+                  style={{ background: 'rgba(5,9,18,0.80)', backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)', border: '1px solid rgba(0,255,128,0.35)', borderRadius: '10px', boxShadow: '0 4px 24px rgba(0,0,0,0.55)', pointerEvents: 'auto' }}>
+                  <span style={{ ...PIXEL, fontSize: '8px', color: '#00ff80', textShadow: '0 0 10px #00ff80' }}>🧪 TESTING</span>
+                  <button
+                    onClick={() => useGameStore.setState({ gameState: 'menu', gameMode: 'classic', isPaused: false })}
+                    style={{ ...BTN_R, fontSize: '7px', padding: '4px 8px' }}>
+                    EXIT
+                  </button>
+                </div>
               ) : gameMode === 'parkour' ? (
                 <ParkourLeftCard level={parkourLevel} activeGadgets={activeGadgets} dbRecords={profile?.parkour_records} />
               ) : (
@@ -1402,7 +1414,7 @@ export default function App() {
               )}
 
               {/* ════ CENTER — classic color target only ════ */}
-              {gameMode !== 'ghetto' && gameMode !== 'parkour' && (gameState === 'playing' || gameState === 'elimination') && targetColor && (
+              {gameMode !== 'ghetto' && gameMode !== 'parkour' && gameMode !== 'testing' && (gameState === 'playing' || gameState === 'elimination') && targetColor && (
                 <div style={{ position: 'fixed', top: '24px', left: '50%', transform: 'translateX(-50%)', zIndex: 9996, pointerEvents: 'none' }}>
                   <motion.div key={roundsSurvived}
                     initial={{ scale: 0.8, opacity: 0, y: -20 }} animate={{ scale: 1, opacity: 1, y: 0 }}
@@ -1795,16 +1807,32 @@ export default function App() {
                 </div>
 
                 {isHost ? (
-                  <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
-                    onClick={() => useGameStore.getState().startGame()}
-                    className="w-full py-4 px-4 flex items-center justify-center gap-3"
-                    style={BTN_Y}>
-                    <Play fill="currentColor" size={14} /> {t('start_game')} ({players.length}/12)
-                  </motion.button>
+                  <div className="w-full flex flex-col gap-2">
+                    <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
+                      onClick={() => useGameStore.getState().startGame()}
+                      className="w-full py-4 px-4 flex items-center justify-center gap-3"
+                      style={BTN_Y}>
+                      <Play fill="currentColor" size={14} /> {t('start_game')} ({players.length}/12)
+                    </motion.button>
+                    <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
+                      onClick={startTesting}
+                      className="w-full py-2 px-4 flex items-center justify-center gap-2"
+                      style={{ ...BTN_W, fontSize: '8px', letterSpacing: '0.1em' }}>
+                      🧪 TESTING
+                    </motion.button>
+                  </div>
                 ) : (
-                  <div className="w-full py-4 px-4 flex items-center justify-center gap-3"
-                    style={{ ...PIXEL, fontSize: '9px', color: C.white, background: 'rgba(255,255,255,0.04)', border: `2px solid rgba(255,255,255,0.15)`, borderRadius: '3px' }}>
-                    <Loader2 className="animate-spin shrink-0" size={14} /> {t('waiting_for_host')}
+                  <div className="w-full flex flex-col gap-2">
+                    <div className="w-full py-4 px-4 flex items-center justify-center gap-3"
+                      style={{ ...PIXEL, fontSize: '9px', color: C.white, background: 'rgba(255,255,255,0.04)', border: `2px solid rgba(255,255,255,0.15)`, borderRadius: '3px' }}>
+                      <Loader2 className="animate-spin shrink-0" size={14} /> {t('waiting_for_host')}
+                    </div>
+                    <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.97 }}
+                      onClick={startTesting}
+                      className="w-full py-2 px-4 flex items-center justify-center gap-2"
+                      style={{ ...BTN_W, fontSize: '8px', letterSpacing: '0.1em' }}>
+                      🧪 TESTING
+                    </motion.button>
                   </div>
                 )}
               </motion.div>

@@ -18,7 +18,7 @@ export const COLORS = [
 export const BOT_NAMES = ['Astro', 'Turbo', 'Neon', 'Pixels', 'Blitz', 'Dash', 'Zenith', 'Nova', 'Echo', 'Vortex', 'Pulse'];
 
 type GameState = 'menu' | 'waiting' | 'playing' | 'elimination' | 'gameover' | 'victory' | 'levelcomplete';
-type GameMode = 'classic' | 'parkour' | 'ghetto';
+type GameMode = 'classic' | 'parkour' | 'ghetto' | 'testing';
 export type GadgetType = 'doubleJump' | 'speedBoost' | 'highJump';
 export interface ActiveGadget { type: GadgetType; timeLeft: number; }
 
@@ -51,6 +51,7 @@ interface GameStore {
   setUsername: (name: string) => void;
   setHoveredBlock: (index: number) => void;
   startGame: () => void;
+  startTesting: () => void;
   startRound: () => void;
   collectCoin: (index: number) => void;
 
@@ -359,10 +360,21 @@ export const useGameStore = create<GameStore>((set, get) => ({
     audio.playRoundStartSound();
   },
 
+  startTesting: () => {
+    audio.init();
+    set(state => ({
+      gameId: state.gameId + 1,
+      gameMode: 'testing',
+      gameState: 'playing',
+      isPaused: false,
+    }));
+  },
+
   togglePause: () => set(state => ({ isPaused: !state.isPaused })),
 
   tick: (delta: number) => {
-    const { gameState, timeLeft } = get();
+    const { gameState, timeLeft, gameMode } = get();
+    if (gameMode === 'testing') return; // no timer in testing mode
     if (gameState === 'playing') {
       const newTime = timeLeft - delta;
       if (newTime <= 0) {
