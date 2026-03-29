@@ -267,6 +267,11 @@ export const useMultiplayerStore = create<MultiplayerState>((set, get) => ({
        }
     }
     
+    // Purge stale position data so it doesn't bleed into future sessions
+    if (typeof window !== 'undefined') {
+      (window as any).remotePlayerBuffer = {};
+    }
+
     set({ channel: null, lobbyId: null, isHost: false, players: [], myPlayerId: null });
   },
 

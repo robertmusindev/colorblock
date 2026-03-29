@@ -16,6 +16,7 @@ interface NetworkPlayerProps {
 // Pre-allocate to avoid GC in useFrame
 const _targetQuat = new THREE.Quaternion();
 const _euler = new THREE.Euler();
+const _prevPos = new THREE.Vector3();
 
 export function NetworkPlayer({ id, name, position, rotation, isEliminated, skinId }: NetworkPlayerProps) {
   const group = useRef<THREE.Group>(null);
@@ -31,19 +32,15 @@ export function NetworkPlayer({ id, name, position, rotation, isEliminated, skin
   const fallVelocity = useRef(0);
   const walkTime = useRef(0);
 
+  // Snap to real position on mount: read buffer first (more current than Zustand presence pos)
+  // This prevents the [0,5,0] ghost-slide that happens when Zustand never carries live movement.
   useEffect(() => {
-    if (position) {
-      targetPosition.current.set(position[0], position[1], position[2]);
-      
-      // If we haven't initialized yet, or if it's a huge jump (teleport), snap immediately
-      if (!hasInitialized.current || group.current?.position.distanceTo(targetPosition.current) > 5) {
-        if (group.current) {
-          group.current.position.copy(targetPosition.current);
-        }
-        hasInitialized.current = true;
-      }
-    }
-  }, [position]);
+    const buffer = (window as any).remotePlayerBuffer;
+    const snapPos = (buffer && buffer[id]?.position) ? buffer[id].position : position;
+    targetPosition.current.set(snapPos[0], snapPos[1], snapPos[2]);
+    if (group.current) group.current.position.copy(targetPosition.current);
+    hasInitialized.current = true;
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const { scene } = useGLTF(import.meta.env.BASE_URL + 'asset3d/charactert.glb');
   const textures = useTexture({
@@ -86,15 +83,18 @@ export function NetworkPlayer({ id, name, position, rotation, isEliminated, skin
     const buffer = (window as any).remotePlayerBuffer;
     if (buffer && buffer[id]) {
       const b = buffer[id];
-      targetPosition.current.set(b.position[0], b.position[1], b.position[2]);
-      
-      if (b.skinId && b.skinId !== currentSkin) {
-        setCurrentSkin(b.skinId);
-      }
+      // Skip stale data (player likely disconnected if >2s without update)
+      if ((Date.now() - b.timestamp) <= 2000) {
+        targetPosition.current.set(b.position[0], b.position[1], b.position[2]);
 
-      _euler.set(b.rotation[0], b.rotation[1], b.rotation[2], 'XYZ');
-      _targetQuat.setFromEuler(_euler);
-      group.current.quaternion.slerp(_targetQuat, 1 - Math.exp(-15 * delta));
+        if (b.skinId && b.skinId !== currentSkin) {
+          setCurrentSkin(b.skinId);
+        }
+
+        _euler.set(b.rotation[0], b.rotation[1], b.rotation[2], 'XYZ');
+        _targetQuat.setFromEuler(_euler);
+        group.current.quaternion.slerp(_targetQuat, 1 - Math.exp(-15 * delta));
+      }
     }
 
     // Rainbow effect for Legendary Skin
@@ -103,10 +103,10 @@ export function NetworkPlayer({ id, name, position, rotation, isEliminated, skin
     }
 
     const lerpFactor = 1 - Math.exp(-12 * delta);
-    const previousPos = group.current.position.clone();
+    _prevPos.copy(group.current.position);
     group.current.position.lerp(targetPosition.current, lerpFactor);
-    
-    const distanceMoved = previousPos.distanceTo(group.current.position);
+
+    const distanceMoved = _prevPos.distanceTo(group.current.position);
     const legL = legLRef.current;
     const legR = legRRef.current;
     

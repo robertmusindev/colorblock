@@ -75,6 +75,7 @@ export function Player() {
   const blockGroundedRef  = useRef(false); // True after jump — clears only on real landing (velocity snap)
   const jumpCooldownRef   = useRef(0);    // Minimum time between jumps to prevent spam
   const inFlightRef       = useRef(false); // True from any jump until confirmed landing — guards airJumps reset
+  const inFlightTimerRef  = useRef(0);    // Safety: max flight time — force-clears blockGrounded if stuck
 
   // Ghetto mode refs
   const gameModeRef = useRef<string>('classic');
@@ -300,10 +301,16 @@ export function Player() {
   });
   const shotgunTex = useTexture(import.meta.env.BASE_URL + 'texture/shotgun.png');
   const machinegunTex = useTexture(import.meta.env.BASE_URL + 'texture/Machinegun_t.png');
-  const { scene: hatScene }   = useGLTF(import.meta.env.BASE_URL + 'asset3d/paperhead.glb');
-  const hatTex                = useTexture(import.meta.env.BASE_URL + 'texture/cap1.png');
-  const { scene: happyScene } = useGLTF(import.meta.env.BASE_URL + 'asset3d/happy.glb');
-  const happyTex              = useTexture(import.meta.env.BASE_URL + 'texture/cap3.png');
+  const { scene: hatScene }        = useGLTF(import.meta.env.BASE_URL + 'asset3d/paperhead.glb');
+  const hatTex                     = useTexture(import.meta.env.BASE_URL + 'texture/cap1.png');
+  const { scene: happyScene }      = useGLTF(import.meta.env.BASE_URL + 'asset3d/happy.glb');
+  const happyTex                   = useTexture(import.meta.env.BASE_URL + 'texture/cap3.png');
+  const { scene: coneScene }       = useGLTF(import.meta.env.BASE_URL + 'asset3d/cone2.glb');
+  const coneTex                    = useTexture(import.meta.env.BASE_URL + 'texture/cono.png');
+  const { scene: bourgeoisScene }  = useGLTF(import.meta.env.BASE_URL + 'asset3d/Bourgeois_hat.glb');
+  const bourgeoisTex               = useTexture(import.meta.env.BASE_URL + 'texture/borghesehat.png');
+  const { scene: hornsScene }      = useGLTF(import.meta.env.BASE_URL + 'asset3d/horns.glb');
+  const hornsTex                   = useTexture(import.meta.env.BASE_URL + 'texture/horns.png');
 
   const shotgunMesh = useMemo(() => {
     const c = shotgunScene.clone();
@@ -353,22 +360,69 @@ export function Player() {
     return c;
   }, [happyScene, happyTex]);
 
+  const coneMesh = useMemo(() => {
+    const c = coneScene.clone();
+    const tex = coneTex.clone();
+    tex.flipY = false;
+    tex.colorSpace = THREE.SRGBColorSpace;
+    c.traverse(child => {
+      if ((child as THREE.Mesh).isMesh) {
+        (child as THREE.Mesh).material = new THREE.MeshStandardMaterial({ map: tex });
+      }
+    });
+    return c;
+  }, [coneScene, coneTex]);
+
+  const bourgeoisMesh = useMemo(() => {
+    const c = bourgeoisScene.clone();
+    const tex = bourgeoisTex.clone();
+    tex.flipY = false;
+    tex.colorSpace = THREE.SRGBColorSpace;
+    c.traverse(child => {
+      if ((child as THREE.Mesh).isMesh) {
+        (child as THREE.Mesh).material = new THREE.MeshStandardMaterial({ map: tex });
+      }
+    });
+    return c;
+  }, [bourgeoisScene, bourgeoisTex]);
+
+  const hornsMesh = useMemo(() => {
+    const c = hornsScene.clone();
+    const tex = hornsTex.clone();
+    tex.flipY = false;
+    tex.colorSpace = THREE.SRGBColorSpace;
+    c.traverse(child => {
+      if ((child as THREE.Mesh).isMesh) {
+        (child as THREE.Mesh).material = new THREE.MeshStandardMaterial({ map: tex });
+      }
+    });
+    return c;
+  }, [hornsScene, hornsTex]);
+
   const ghettoWeapon = useGameStore(state => state.ghettoWeapon);
 
   const clone = useMemo(() => {
     const c = scene.clone();
-    
+
     // Apply skin using centralized utility
     applySkinToModel(c, equippedSkin, textures);
-    
+
     // Find leg nodes by actual GLB names: Leg_S (left), Leg_R (right), body
     const { legL, legR, body } = findLegNodes(c);
     legLRef.current = legL;
     legRRef.current = legR;
     bodyNodeRef.current = body;
-    
+
     return c;
-  }, [scene, textures, equippedSkin]);
+    // NOTE: equippedSkin intentionally excluded — skin changes are applied
+    // via the useEffect below, avoiding an unreliable <primitive> object swap.
+  }, [scene, textures]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Re-apply skin on the existing clone whenever the equipped skin changes.
+  // Direct material mutation is more reliable than swapping <primitive object={}>.
+  useEffect(() => {
+    if (clone) applySkinToModel(clone, equippedSkin, textures);
+  }, [clone, equippedSkin, textures]);
 
   useFrame((state, delta) => {
     if (!bodyRef.current) return;
@@ -418,6 +472,21 @@ export function Player() {
       blockGroundedRef.current = false;
       inFlightRef.current = false; // Confirmed landing — flight sequence over
       airJumpsRef.current = 0;    // Restore air jumps on real landing
+      inFlightTimerRef.current = 0;
+    }
+
+    // Safety fallback: if blockGrounded has been stuck for >3s (soft landing missed the snap check),
+    // force-clear it so the player can always jump again and animations don't freeze.
+    if (inFlightRef.current) {
+      inFlightTimerRef.current += delta;
+      if (inFlightTimerRef.current > 3.0) {
+        blockGroundedRef.current = false;
+        inFlightRef.current = false;
+        airJumpsRef.current = 0;
+        inFlightTimerRef.current = 0;
+      }
+    } else {
+      inFlightTimerRef.current = 0;
     }
     // rawGrounded: not mid-jump (blockGrounded) AND not actively jumping up fast (vel.y < 3.0)
     // AND not falling (vel.y > -1.5) AND position stable per-frame (yDiff < 0.2).
@@ -847,8 +916,11 @@ export function Player() {
     )}
     <RigidBody ref={bodyRef} ccd={true} colliders={false} position={gameMode === 'ghetto' ? [0, 10, 0] : [1, 5, 1]} enabledRotations={[false, false, false]}>
       <CapsuleCollider args={[0.5, 0.5]} friction={0} restitution={0} />
-      {equippedHat === 'hat_paperhead' && <BallCollider args={[0.28]} position={[0, 0.88, 0]} />}
-      {equippedHat === 'hat_happy'     && <BallCollider args={[0.22]} position={[0, 0.95, 0]} />}
+      {equippedHat === 'hat_paperhead'  && <BallCollider args={[0.28]} position={[0, 0.88, 0]} />}
+      {equippedHat === 'hat_happy'      && <BallCollider args={[0.22]} position={[0, 0.95, 0]} />}
+      {equippedHat === 'hat_cone'       && <BallCollider args={[0.25]} position={[0, 0.95, 0]} />}
+      {equippedHat === 'hat_bourgeois'  && <BallCollider args={[0.28]} position={[0, 0.92, 0]} />}
+      {equippedHat === 'hat_horns'      && <BallCollider args={[0.30]} position={[0, 0.95, 0]} />}
       {/* 3D Model Avatar - Physics group stays fixed */}
       {/* Luce warm intorno al player — lo stacca dallo sfondo */}
       <pointLight color="#ffe8a0" intensity={6} distance={5} decay={2} />
@@ -862,8 +934,11 @@ export function Player() {
         {/* Visual group for animations only - separate from physics */}
         <group ref={visualRef}>
           <primitive object={clone} />
-          {equippedHat === 'hat_paperhead' && <primitive object={hatMesh} />}
-          {equippedHat === 'hat_happy'     && <primitive object={happyMesh} />}
+          {equippedHat === 'hat_paperhead'  && <primitive object={hatMesh} />}
+          {equippedHat === 'hat_happy'      && <primitive object={happyMesh} />}
+          {equippedHat === 'hat_cone'       && <primitive object={coneMesh} />}
+          {equippedHat === 'hat_bourgeois'  && <primitive object={bourgeoisMesh} />}
+          {equippedHat === 'hat_horns'      && <primitive object={hornsMesh} />}
         </group>
         {/* Ghetto mode: pistol (pistol or m16 equipped) */}
         {gameMode === 'ghetto' && ghettoWeapon !== 'shotgun' && (

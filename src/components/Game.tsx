@@ -300,25 +300,27 @@ export function Game() {
                 <>
                   <Player key={`player-${gameId}`} />
 
-                  {/* Realtime network players */}
-                  {lobbyId && remotePlayers.map(p => (
-                    <NetworkPlayer
-                      key={`net-${gameId}-${p.id}`}
-                      id={p.id}
-                      name={p.name}
-                      position={p.position || [0, 5, 0]}
-                      rotation={p.rotation}
-                      isEliminated={p.isEliminated}
-                      skinId={p.skinId}
-                    />
-                  ))}
-
                   {/* AI Bots (singleplayer only) */}
                   {!lobbyId && aliveBots.map(id => (
                     <Bot key={`bot-${gameId}-${id}`} id={id} name={BOT_NAMES[id]} />
                   ))}
                 </>
               )}
+
+              {/* Realtime network players — outside the playing guard so they are never
+                  unmounted mid-session (prevents re-snap to [0,5,0] each round).
+                  Safe: lobbyId is null during menu/singleplayer, so nothing renders. */}
+              {lobbyId && remotePlayers.map(p => (
+                <NetworkPlayer
+                  key={`net-${p.id}`}
+                  id={p.id}
+                  name={p.name}
+                  position={p.position || [0, 5, 0]}
+                  rotation={p.rotation}
+                  isEliminated={p.isEliminated}
+                  skinId={p.skinId}
+                />
+              ))}
             </>
           )}
         </Physics>

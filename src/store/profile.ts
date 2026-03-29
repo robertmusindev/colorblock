@@ -53,6 +53,9 @@ export const SHOP_ITEMS: ShopItem[] = [
   // Hats
   { id: 'hat_paperhead', name: 'Paperhead', description: 'Un cappello di carta per il tuo personaggio', price: 0, icon: '🎩', category: 'hats', tier: 'Basic' },
   { id: 'hat_happy', name: 'Happy Hat', description: 'Un simpatico cappello a cono', price: 300, icon: '🎉', category: 'hats', tier: 'Rare' },
+  { id: 'hat_cone', name: 'Cone Hat', description: 'Un cappello a cono arancione', price: 500, icon: '🔺', category: 'hats', tier: 'Rare' },
+  { id: 'hat_bourgeois', name: 'Bourgeois Hat', description: 'Un elegante cappello viola da borghese', price: 800, icon: '🪄', category: 'hats', tier: 'Epic' },
+  { id: 'hat_horns', name: 'Horns', description: 'Corna rosse del diavolo', price: 600, icon: '😈', category: 'hats', tier: 'Rare' },
 ];
 
 export interface UserProfile {
@@ -261,12 +264,30 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
         { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${user.id}` },
         (payload) => {
           console.log('Profilo aggiornato in real-time!', payload.new);
-          // Aggiorna lo stato locale unendo i nuovi dati
+          const newData = payload.new as any;
           const currentProfile = get().profile;
+
+          // Supabase realtime may deliver JSONB columns as raw JSON strings — parse them
+          const inventory = typeof newData.inventory === 'string'
+            ? JSON.parse(newData.inventory)
+            : (newData.inventory ?? currentProfile?.inventory);
+          const missions = typeof newData.missions === 'string'
+            ? JSON.parse(newData.missions)
+            : (newData.missions ?? currentProfile?.missions);
+
           if (currentProfile) {
-            set({ profile: { ...currentProfile, ...payload.new } });
+            set({
+              profile: {
+                ...currentProfile,
+                ...newData,
+                inventory,
+                missions,
+                // equipped_hat lives inside inventory JSONB
+                equipped_hat: inventory?.equipped_hat ?? currentProfile.equipped_hat,
+              },
+            });
           } else {
-             set({ profile: payload.new as UserProfile });
+            set({ profile: { ...newData, inventory, missions } as UserProfile });
           }
         }
       )
@@ -404,10 +425,14 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
     if (!currentProfile) return;
 
     // Ensure the player actually owns this skin
+    const inv = currentProfile.inventory;
     const ownsSkin =
-      currentProfile.inventory?.skins?.includes(skinId) ||
+      (Array.isArray(inv?.skins) ? inv.skins.includes(skinId) : false) ||
       currentProfile.unlocked_items?.includes(skinId);
     if (!ownsSkin) return;
+
+    // Optimistic update: apply immediately so the player sees the change at once
+    set({ profile: { ...currentProfile, equipped_skin: skinId } });
 
     try {
       const { error } = await supabase
@@ -416,15 +441,10 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
         .eq('id', user.id);
 
       if (error) throw error;
-
-      set({
-        profile: {
-          ...currentProfile,
-          equipped_skin: skinId,
-        },
-      });
     } catch (err) {
       console.error('Error equipping skin:', err);
+      // Rollback to previous state on failure
+      set({ profile: currentProfile });
     }
   },
 
@@ -435,13 +455,17 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
     const currentProfile = get().profile;
     if (!currentProfile) return;
 
+    const inv = currentProfile.inventory;
     const ownsHat =
-      currentProfile.inventory?.hats?.includes(hatId) ||
+      (Array.isArray(inv?.hats) ? inv.hats.includes(hatId) : false) ||
       currentProfile.unlocked_items?.includes(hatId);
     if (!ownsHat) return;
 
     // Store equipped_hat inside inventory JSONB (no separate DB column needed)
     const newInventory: any = { ...(currentProfile.inventory || {}), equipped_hat: hatId };
+
+    // Optimistic update
+    set({ profile: { ...currentProfile, inventory: newInventory, equipped_hat: hatId } });
 
     try {
       const { error } = await supabase
@@ -450,16 +474,10 @@ export const useProfileStore = create<ProfileState>((set, get) => ({
         .eq('id', user.id);
 
       if (error) throw error;
-
-      set({
-        profile: {
-          ...currentProfile,
-          inventory: newInventory,
-          equipped_hat: hatId,
-        },
-      });
     } catch (err) {
       console.error('Error equipping hat:', err);
+      // Rollback
+      set({ profile: currentProfile });
     }
   },
 

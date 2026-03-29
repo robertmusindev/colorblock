@@ -14,6 +14,8 @@ export function SkinPreview({ skinId }: SkinPreviewProps) {
     default: import.meta.env.BASE_URL + 'texture/TEST_Material.002_BaseColor.png',
     israel: import.meta.env.BASE_URL + 'skins/israel_skin.png',
     robsbagliato: import.meta.env.BASE_URL + 'texture/robsbagliato.png',
+    skin3: import.meta.env.BASE_URL + 'texture/skin3.png',
+    skin4: import.meta.env.BASE_URL + 'texture/skin4.png',
   });
 
   const legLRef = useRef<THREE.Object3D | null>(null);

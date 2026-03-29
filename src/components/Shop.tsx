@@ -9,6 +9,7 @@ import { SkinAcquisitionHero } from './SkinAcquisitionHero';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls, Environment } from '@react-three/drei';
 import { SkinPreview } from './SkinPreview';
+import { HatPreview } from './HatPreview';
 
 // ─── Rarity config ────────────────────────────────────────────────────────────
 type Tier = 'Basic' | 'Rare' | 'Epic' | 'Legendary';
@@ -97,6 +98,7 @@ function ItemCard({ item, isOwned, canAfford, isEquipped, isSelected, onSelect, 
   const stars = '★'.repeat(rc.stars);
   const canEquipWithoutBuy = isOwned && !isEquipped && (item.category === 'skins' || item.category === 'hats');
   const isSkin = item.category === 'skins';
+  const isHat  = item.category === 'hats';
   const isLeg = tier === 'Legendary';
 
   // ── Tilt on mouse ──
@@ -118,7 +120,7 @@ function ItemCard({ item, isOwned, canAfford, isEquipped, isSelected, onSelect, 
     <motion.div
       ref={cardRef}
       className="relative cursor-pointer group"
-      style={{ paddingTop: isSkin ? 0 : '1.75rem', rotateX: rotX, rotateY: rotY, transformPerspective: 700 }}
+      style={{ paddingTop: (isSkin || isHat) ? 0 : '1.75rem', rotateX: rotX, rotateY: rotY, transformPerspective: 700 }}
       whileHover={{ y: -5 }}
       transition={{ type: 'spring', stiffness: 400, damping: 22 }}
       onClick={onSelect}
@@ -134,8 +136,8 @@ function ItemCard({ item, isOwned, canAfford, isEquipped, isSelected, onSelect, 
         style={{ boxShadow: `0 0 32px 6px ${rc.glow}60` }}
       />
 
-      {/* Pop-out icon bubble — non-skin only */}
-      {!isSkin && (
+      {/* Pop-out icon bubble — trails/emotes only */}
+      {!isSkin && !isHat && (
         <div className="absolute top-0 inset-x-0 flex justify-center z-20 pointer-events-none">
           <div
             className="w-14 h-14 rounded-full flex items-center justify-center border-[3px] border-white/50"
@@ -180,13 +182,22 @@ function ItemCard({ item, isOwned, canAfford, isEquipped, isSelected, onSelect, 
           </div>
         )}
 
-        {/* 3D skin canvas */}
+        {/* 3D skin/hat canvas */}
         {isSkin ? (
           <div className="relative h-32 w-full bg-black/30 z-10">
             <Canvas camera={{ position: [0, 1.2, 3.5], fov: 35 }} gl={{ antialias: false, powerPreference: 'low-power' }}>
               <ambientLight intensity={1.6} />
               <directionalLight position={[2, 4, 2]} intensity={1.8} />
               <Suspense fallback={null}><SkinPreview skinId={item.id} /></Suspense>
+            </Canvas>
+            <div className="absolute bottom-0 inset-x-0 h-8 bg-gradient-to-t from-black/55 to-transparent pointer-events-none" />
+          </div>
+        ) : isHat ? (
+          <div className="relative h-32 w-full bg-black/30 z-10">
+            <Canvas camera={{ position: [0, 1.2, 3.5], fov: 35 }} gl={{ antialias: false, powerPreference: 'low-power' }}>
+              <ambientLight intensity={1.6} />
+              <directionalLight position={[2, 4, 2]} intensity={1.8} />
+              <Suspense fallback={null}><HatPreview hatId={item.id} /></Suspense>
             </Canvas>
             <div className="absolute bottom-0 inset-x-0 h-8 bg-gradient-to-t from-black/55 to-transparent pointer-events-none" />
           </div>
