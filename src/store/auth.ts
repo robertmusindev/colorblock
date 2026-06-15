@@ -23,11 +23,26 @@ export const useAuthStore = create<AuthState>((set) => ({
   setLoading: (isLoading) => set({ isLoading }),
   
   initializeAuth: () => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      set({ session, user: session?.user ?? null, isLoading: false });
-    });
+    // Safety net: never let the app hang on the LOADING screen if Supabase is
+    // unreachable (e.g. paused project / DNS failure). Clear loading after 5s.
+    const failsafe = setTimeout(() => {
+      set((s) => (s.isLoading ? { isLoading: false } : s));
+    }, 5000);
+
+    supabase.auth
+      .getSession()
+      .then(({ data: { session } }) => {
+        clearTimeout(failsafe);
+        set({ session, user: session?.user ?? null, isLoading: false });
+      })
+      .catch((err) => {
+        clearTimeout(failsafe);
+        console.error('Auth init failed (Supabase unreachable?):', err);
+        set({ session: null, user: null, isLoading: false });
+      });
 
     supabase.auth.onAuthStateChange((_event, session) => {
+      clearTimeout(failsafe);
       set({ session, user: session?.user ?? null, isLoading: false });
     });
   },
